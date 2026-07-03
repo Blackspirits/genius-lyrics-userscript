@@ -3,7 +3,7 @@
 // ==UserLibrary==
 // @name         GeniusLyrics
 // @description  Downloads and shows genius lyrics for Tampermonkey scripts
-// @version      5.16.20
+// @version      5.16.21
 // @license      GPL-3.0-or-later; http://www.gnu.org/licenses/gpl-3.0.txt
 // @copyright    2019, cuzi (cuzi@openmail.cc) and contributors
 // @supportURL   https://github.com/cvzi/genius-lyrics-userscript/issues
@@ -2834,7 +2834,8 @@ Browser:    ${navigator.userAgent}
   [class*="Comments__Container"],
   [class*="Field-shared__FieldContainer"],
   [class*="IqPoints__Container"],
-  [class*="ContributorSidebar__Sidebar"] {
+  [class*="ContributorSidebar__Sidebar"],
+  [class*="ContributorSidebar__Aside"] {
     display: none;
   }
   div[class*="InnerSectionDivider"] {
@@ -3095,6 +3096,7 @@ Browser:    ${navigator.userAgent}
           pushIfAny(removals, document.querySelector('div[class^="StickyContributorToolbar"]'))
           removals.push(...document.querySelectorAll('button[class^="SmallButton"]'))
           pushIfAny(removals, document.querySelector('div[class^="SongDescription"] div[class^="SongDescription"]'))
+          pushIfAny(removals, document.querySelector('div[class^="ContributorSidebar__Aside"]'))
 
           const divs = document.querySelectorAll('div[class^="PageGriddesktop"]')
           for (const div of divs) {
