@@ -2086,7 +2086,6 @@ Browser:    ${navigator.userAgent}
             })
           }
           document.querySelectorAll('[class*="SongHeader-desktop__AlbumCredit"] svg').forEach(e => e.remove())
-
         }
         onload.push(clickableTitle)
 
