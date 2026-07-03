@@ -308,7 +308,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
   const onMessage = {}
   const pictureInPictureModes = ['disabled', 'when-tab-is-hidden', 'always']
   const detectPictureInPictureCapabilities = function () {
-    const supportsDocumentPictureInPicture = typeof window.documentPictureInPicture === 'object' && typeof (window.documentPictureInPicture || 0).requestWindow === 'function'
+    let supportsDocumentPictureInPicture = typeof window.documentPictureInPicture === 'object' && typeof (window.documentPictureInPicture || 0).requestWindow === 'function'
     let supportsFirefoxVideoSourcePictureInPicture = false
     try {
       const canvas = document.createElement('canvas')
@@ -317,6 +317,10 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
         typeof canvas.captureStream === 'function' &&
         typeof video.play === 'function'
     } catch (e) {}
+    if (navigator.userAgent.indexOf('Firefox') !== -1) {
+      // disable documentPictureInPicture for Firefox since its support is too limited
+      supportsDocumentPictureInPicture = false
+    }
     const supportsAutomaticPictureInPicture = supportsDocumentPictureInPicture && typeof (navigator.mediaSession || 0).setActionHandler === 'function'
     const usesVideoElementPictureInPicture = !supportsDocumentPictureInPicture && supportsFirefoxVideoSourcePictureInPicture
     const supportsAnyPictureInPicture = supportsAutomaticPictureInPicture || usesVideoElementPictureInPicture
