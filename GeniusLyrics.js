@@ -3,7 +3,7 @@
 // ==UserLibrary==
 // @name         GeniusLyrics
 // @description  Downloads and shows genius lyrics for Tampermonkey scripts
-// @version      5.16.21.1
+// @version      5.16.21.2
 // @license      GPL-3.0-or-later; http://www.gnu.org/licenses/gpl-3.0.txt
 // @copyright    2019, cuzi (cuzi@openmail.cc) and contributors
 // @supportURL   https://github.com/cvzi/genius-lyrics-userscript/issues
@@ -3754,6 +3754,7 @@ Browser:    ${navigator.userAgent}
     // flush to DOM tree
     appendElements(bar, elementsToBeAppended)
     appendElements(container, [bar, iframe])
+    if (typeof custom.onLyricsBarReady === 'function') custom.onLyricsBarReady(bar)
     updateFirefoxPictureInPictureUi()
 
     // clean up
@@ -5000,6 +5001,7 @@ Browser:    ${navigator.userAgent}
 
       const firefoxPiPWidthInput = div.appendChild(document.createElement('input'))
       firefoxPiPWidthInput.type = 'number'
+      firefoxPiPWidthInput.id = 'firefoxPiPWidth748'
       firefoxPiPWidthInput.min = `${FIREFOX_PICTURE_IN_PICTURE_MIN_DIMENSION}`
       firefoxPiPWidthInput.max = `${FIREFOX_PICTURE_IN_PICTURE_MAX_DIMENSION}`
       firefoxPiPWidthInput.style.maxWidth = '6em'
@@ -5067,6 +5069,7 @@ Browser:    ${navigator.userAgent}
     div = win.appendChild(document.createElement('div'))
     div.textContent = 'Theme: '
     const selectTheme = div.appendChild(document.createElement('select'))
+    selectTheme.id = 'selectTheme748'
     for (const key in themes) {
       const option = selectTheme.appendChild(document.createElement('option'))
       option.value = key
@@ -5177,6 +5180,7 @@ Browser:    ${navigator.userAgent}
     div = win.appendChild(document.createElement('div'))
     div.textContent = 'Romaji: '
     const selectRomajiPriority = div.appendChild(document.createElement('select'))
+    selectRomajiPriority.id = 'selectRomajiPriority748'
     const romajiPriorities = [
       {
         text: 'Low Priority',
@@ -5215,6 +5219,7 @@ Browser:    ${navigator.userAgent}
     div = win.appendChild(document.createElement('div'))
     div.textContent = 'LZCompression: '
     const selectLZCompression = div.appendChild(document.createElement('select'))
+    selectLZCompression.id = 'selectLZCompression748'
     const lzCompressionOptions = [
       {
         text: 'Enabled',
@@ -5314,6 +5319,7 @@ Browser:    ${navigator.userAgent}
     'Licensed under the GNU General Public License v3.0'
     ])
     div = win.appendChild(div)
+    if (typeof custom.onOptionsReady === 'function') custom.onOptionsReady(win)
   }
 
   function closeModalUIs () {
