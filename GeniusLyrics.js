@@ -3,7 +3,7 @@
 // ==UserLibrary==
 // @name         GeniusLyrics
 // @description  Downloads and shows genius lyrics for Tampermonkey scripts
-// @version      5.16.21
+// @version      5.16.21.4
 // @license      GPL-3.0-or-later; http://www.gnu.org/licenses/gpl-3.0.txt
 // @copyright    2019, cuzi (cuzi@openmail.cc) and contributors
 // @supportURL   https://github.com/cvzi/genius-lyrics-userscript/issues
@@ -14,6 +14,7 @@
 
 /*
     Copyright (C) 2019, cuzi (cuzi@openmail.cc) and contributors
+    Modified in 2026 by BlackSpirits (https://github.com/Blackspirits).
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -48,7 +49,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
   'use strict'
 
   const __SELECTION_CACHE_VERSION__ = 13
-  const __REQUEST_CACHE_VERSION__ = 13
+  const __REQUEST_CACHE_VERSION__ = 15
 
   /** @type {globalThis.PromiseConstructor} */
   const Promise = (async () => { })().constructor // YouTube polyfill to Promise in older browsers will make the feature being unstable.
@@ -2645,7 +2646,7 @@ Browser:    ${navigator.userAgent}
 
       const originalUrl = doc.querySelector('meta[property="og:url"]') ? doc.querySelector('meta[property="og:url"]').content : null
 
-      const lyricsContainers = Array.from(doc.querySelectorAll('#lyrics-root [class*="Lyrics__Container"'))
+      const lyricsContainers = Array.from(doc.querySelectorAll('#lyrics-root [data-lyrics-container="true"], #lyrics-root div[class^="Lyrics__Container"]'))
       const lyricsPlaceHolder = doc.querySelector('[class*="LyricsPlaceholder"]')
       if (lyricsContainers.length === 0 && !lyricsPlaceHolder) {
         return {
@@ -2707,7 +2708,20 @@ Browser:    ${navigator.userAgent}
       // h1.parentNode.querySelectorAll('[class*="HeaderCredits__"]').forEach(e => e.remove())
       removeIfExists(h1.parentNode.querySelector('div[class^="HeaderTracklist"]'))
 
-      const headerHtml = '<div class="myheader">' + h1.parentNode.outerHTML + '</div>'
+      let coverHtml = ''
+      if (metaImageUrl?.content && !h1.parentNode.querySelector('img')) {
+        const coverLink = doc.createElement('a')
+        coverLink.className = 'genius-cover-link'
+        coverLink.href = originalUrl || '#'
+        coverLink.target = '_blank'
+        const cover = coverLink.appendChild(doc.createElement('img'))
+        cover.src = metaImageUrl.content
+        cover.alt = ''
+        cover.loading = 'lazy'
+        cover.decoding = 'async'
+        coverHtml = coverLink.outerHTML
+      }
+      const headerHtml = '<div class="myheader">' + coverHtml + '<div class="genius-header-details">' + h1.parentNode.outerHTML + '</div></div>'
 
       return {
         error: false,
@@ -3754,6 +3768,7 @@ Browser:    ${navigator.userAgent}
     // flush to DOM tree
     appendElements(bar, elementsToBeAppended)
     appendElements(container, [bar, iframe])
+    if (typeof custom.onLyricsBarReady === 'function') custom.onLyricsBarReady(bar)
     updateFirefoxPictureInPictureUi()
 
     // clean up
@@ -5000,6 +5015,7 @@ Browser:    ${navigator.userAgent}
 
       const firefoxPiPWidthInput = div.appendChild(document.createElement('input'))
       firefoxPiPWidthInput.type = 'number'
+      firefoxPiPWidthInput.id = 'firefoxPiPWidth748'
       firefoxPiPWidthInput.min = `${FIREFOX_PICTURE_IN_PICTURE_MIN_DIMENSION}`
       firefoxPiPWidthInput.max = `${FIREFOX_PICTURE_IN_PICTURE_MAX_DIMENSION}`
       firefoxPiPWidthInput.style.maxWidth = '6em'
@@ -5067,6 +5083,7 @@ Browser:    ${navigator.userAgent}
     div = win.appendChild(document.createElement('div'))
     div.textContent = 'Theme: '
     const selectTheme = div.appendChild(document.createElement('select'))
+    selectTheme.id = 'selectTheme748'
     for (const key in themes) {
       const option = selectTheme.appendChild(document.createElement('option'))
       option.value = key
@@ -5177,6 +5194,7 @@ Browser:    ${navigator.userAgent}
     div = win.appendChild(document.createElement('div'))
     div.textContent = 'Romaji: '
     const selectRomajiPriority = div.appendChild(document.createElement('select'))
+    selectRomajiPriority.id = 'selectRomajiPriority748'
     const romajiPriorities = [
       {
         text: 'Low Priority',
@@ -5215,6 +5233,7 @@ Browser:    ${navigator.userAgent}
     div = win.appendChild(document.createElement('div'))
     div.textContent = 'LZCompression: '
     const selectLZCompression = div.appendChild(document.createElement('select'))
+    selectLZCompression.id = 'selectLZCompression748'
     const lzCompressionOptions = [
       {
         text: 'Enabled',
@@ -5306,14 +5325,19 @@ Browser:    ${navigator.userAgent}
     'Powered by ',
     ['a', { style: { 'font-size': '15px' } }, { attr: { target: '_blank', href: 'https://github.com/cvzi/genius-lyrics-userscript/' } }, 'GeniusLyrics.js'
     ],
+    ['br'],
     'Copyright © 2019 ',
     ['a', { style: { 'font-size': '15px' } }, { attr: { href: 'mailto:cuzi@openmail.cc' } }, 'cuzi'
     ],
     ' and contributors.',
     ['br'],
+    '2026 modifications and maintenance: ',
+    ['a', { style: { 'font-size': '15px' } }, { attr: { target: '_blank', href: 'https://github.com/Blackspirits' } }, 'BlackSpirits'],
+    ['br'],
     'Licensed under the GNU General Public License v3.0'
     ])
     div = win.appendChild(div)
+    if (typeof custom.onOptionsReady === 'function') custom.onOptionsReady(win)
   }
 
   function closeModalUIs () {
