@@ -3,7 +3,7 @@
 // ==UserLibrary==
 // @name         GeniusLyrics
 // @description  Downloads and shows genius lyrics for Tampermonkey scripts
-// @version      5.16.21.2
+// @version      5.16.21.3
 // @license      GPL-3.0-or-later; http://www.gnu.org/licenses/gpl-3.0.txt
 // @copyright    2019, cuzi (cuzi@openmail.cc) and contributors
 // @supportURL   https://github.com/cvzi/genius-lyrics-userscript/issues
@@ -48,7 +48,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
   'use strict'
 
   const __SELECTION_CACHE_VERSION__ = 13
-  const __REQUEST_CACHE_VERSION__ = 14
+  const __REQUEST_CACHE_VERSION__ = 15
 
   /** @type {globalThis.PromiseConstructor} */
   const Promise = (async () => { })().constructor // YouTube polyfill to Promise in older browsers will make the feature being unstable.
@@ -2707,7 +2707,20 @@ Browser:    ${navigator.userAgent}
       // h1.parentNode.querySelectorAll('[class*="HeaderCredits__"]').forEach(e => e.remove())
       removeIfExists(h1.parentNode.querySelector('div[class^="HeaderTracklist"]'))
 
-      const headerHtml = '<div class="myheader">' + h1.parentNode.outerHTML + '</div>'
+      let coverHtml = ''
+      if (metaImageUrl?.content && !h1.parentNode.querySelector('img')) {
+        const coverLink = doc.createElement('a')
+        coverLink.className = 'genius-cover-link'
+        coverLink.href = originalUrl || '#'
+        coverLink.target = '_blank'
+        const cover = coverLink.appendChild(doc.createElement('img'))
+        cover.src = metaImageUrl.content
+        cover.alt = ''
+        cover.loading = 'lazy'
+        cover.decoding = 'async'
+        coverHtml = coverLink.outerHTML
+      }
+      const headerHtml = '<div class="myheader">' + coverHtml + '<div class="genius-header-details">' + h1.parentNode.outerHTML + '</div></div>'
 
       return {
         error: false,
@@ -5311,6 +5324,7 @@ Browser:    ${navigator.userAgent}
     'Powered by ',
     ['a', { style: { 'font-size': '15px' } }, { attr: { target: '_blank', href: 'https://github.com/cvzi/genius-lyrics-userscript/' } }, 'GeniusLyrics.js'
     ],
+    ['br'],
     'Copyright © 2019 ',
     ['a', { style: { 'font-size': '15px' } }, { attr: { href: 'mailto:cuzi@openmail.cc' } }, 'cuzi'
     ],
