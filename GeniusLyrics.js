@@ -2645,7 +2645,7 @@ Browser:    ${navigator.userAgent}
 
       const originalUrl = doc.querySelector('meta[property="og:url"]') ? doc.querySelector('meta[property="og:url"]').content : null
 
-      const lyricsContainers = Array.from(doc.querySelectorAll('#lyrics-root [class*="Lyrics__Container"'))
+      const lyricsContainers = Array.from(doc.querySelectorAll('#lyrics-root [data-lyrics-container="true"], #lyrics-root div[class^="Lyrics__Container"]'))
       const lyricsPlaceHolder = doc.querySelector('[class*="LyricsPlaceholder"]')
       if (lyricsContainers.length === 0 && !lyricsPlaceHolder) {
         return {
