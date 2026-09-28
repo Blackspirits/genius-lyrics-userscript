@@ -3,7 +3,7 @@
 // ==UserLibrary==
 // @name         GeniusLyrics
 // @description  Downloads and shows genius lyrics for Tampermonkey scripts
-// @version      5.16.21.5
+// @version      5.16.21.6
 // @license      GPL-3.0-or-later; http://www.gnu.org/licenses/gpl-3.0.txt
 // @copyright    2019, cuzi (cuzi@openmail.cc) and contributors
 // @supportURL   https://github.com/cvzi/genius-lyrics-userscript/issues
@@ -3473,7 +3473,7 @@ Browser:    ${navigator.userAgent}
             .annotationbox {position:absolute; display:none; max-width:95%; min-width: 160px;padding: 3px 7px;margin: 2px 0 0;background-color: #282828;background-clip: padding-box;border: 1px solid rgba(0,0,0,.15);border-radius: .25rem;}
             .annotationbox .annotationlabel {display:inline-block;background-color: hsla(0,0%,100%,.6);color: #000;border-radius: 2px;padding: 0 .3em;}
             .annotationbox .annotation_rich_text_formatting {color: black}
-            .annotationbox .annotation_rich_text_formatting a {color: black)}
+            .annotationbox .annotation_rich_text_formatting a {color: black}
 
             div[class*="HeaderArtistAndTracklistPrimis"] {
               display:none;
@@ -5125,7 +5125,8 @@ Browser:    ${navigator.userAgent}
     inputFontSize.id = 'inputFontSize748'
     inputFontSize.style.maxWidth = '5em'
     const onFontSizeChanged = function onFontSizeChangeListener (evt) {
-      genius.option.fontSize = Math.max(0, parseInt(inputFontSize.value) || 0)
+      genius.option.fontSize = Math.min(99, Math.max(0, parseInt(inputFontSize.value) || 0))
+      inputFontSize.value = genius.option.fontSize
       custom.GM.setValue('fontsize', genius.option.fontSize).then(() => {
         if (genius.onThemeChanged) {
           for (const f of genius.onThemeChanged) {
@@ -5756,7 +5757,7 @@ Browser:    ${navigator.userAgent}
     genius.option.firefoxPictureInPictureHeight = values.firefoxPictureInPictureHeight
     genius.option.firefoxPictureInPictureFontSize = values.firefoxPictureInPictureFontSize
     genius.option.romajiPriority = values.romajipriority
-    genius.option.fontSize = Math.max(0, parseInt(values.fontsize) || 0)
+    genius.option.fontSize = Math.min(99, Math.max(0, parseInt(values.fontsize) || 0))
     genius.option.useLZCompression = values.useLZCompression
     syncFirefoxPictureInPictureStateFromOptions()
     updateFirefoxAspectRatioBox()
