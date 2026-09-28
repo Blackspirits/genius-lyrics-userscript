@@ -3,7 +3,7 @@
 // ==UserLibrary==
 // @name         GeniusLyrics
 // @description  Downloads and shows genius lyrics for Tampermonkey scripts
-// @version      5.16.21.9
+// @version      5.16.21.10
 // @license      GPL-3.0-or-later; http://www.gnu.org/licenses/gpl-3.0.txt
 // @copyright    2019, cuzi (cuzi@openmail.cc) and contributors
 // @supportURL   https://github.com/cvzi/genius-lyrics-userscript/issues
@@ -200,8 +200,8 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     }
 
     try {
-      const { requestAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval } = fc
-      const res = { requestAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval }
+      const { requestAnimationFrame, cancelAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval } = fc
+      const res = { requestAnimationFrame, cancelAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval }
       for (const k in res) res[k] = res[k].bind(win) // necessary
       if (removeIframeFn) Promise.resolve(res.setTimeout).then(removeIframeFn)
       return res
@@ -211,7 +211,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     }
   }
 
-  const { requestAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval } = getUnmodifiedWindowMethods(window)
+  const { requestAnimationFrame, cancelAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval } = getUnmodifiedWindowMethods(window)
 
   const genius = {
     option: {
@@ -358,6 +358,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     canvas: null,
     context: null,
     renderFrameId: 0,
+    renderFrameKind: null,
     nativePictureInPictureActive: false,
     renderedPositionFraction: 0,
     firefoxPreviewVisible: true,
@@ -1034,6 +1035,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
   }
 
   function renderVideoElementPictureInPictureFrame () {
+    cancelScheduledPictureInPictureFrame()
     if (!usesVideoElementPictureInPicture) return
     const canvas = pictureInPictureState.canvas
     const context = pictureInPictureState.context
@@ -1084,16 +1086,36 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     }
 
     if (shouldContinueVideoElementPictureInPictureRender()) {
-      pictureInPictureState.renderFrameId = requestAnimationFrame(renderVideoElementPictureInPictureFrame)
+      requestPictureInPictureFrame()
+    }
+  }
+
+  function cancelScheduledPictureInPictureFrame () {
+    const { renderFrameId, renderFrameKind } = pictureInPictureState
+    if (renderFrameKind === 'timer') clearTimeout(renderFrameId)
+    if (renderFrameKind === 'animation') cancelAnimationFrame(renderFrameId)
+    pictureInPictureState.renderFrameId = 0
+    pictureInPictureState.renderFrameKind = null
+  }
+
+  function requestPictureInPictureFrame () {
+    if (document.hidden) {
+      pictureInPictureState.renderFrameKind = 'timer'
+      pictureInPictureState.renderFrameId = setTimeout(renderVideoElementPictureInPictureFrame, 125)
     } else {
-      pictureInPictureState.renderFrameId = 0
+      pictureInPictureState.renderFrameKind = 'animation'
+      pictureInPictureState.renderFrameId = requestAnimationFrame(renderVideoElementPictureInPictureFrame)
     }
   }
 
   function schedulePictureInPictureRender () {
     if (usesVideoElementPictureInPicture) {
-      if (pictureInPictureState.renderFrameId !== 0) return
-      pictureInPictureState.renderFrameId = requestAnimationFrame(renderVideoElementPictureInPictureFrame)
+      const kind = document.hidden ? 'timer' : 'animation'
+      if (pictureInPictureState.renderFrameId !== 0) {
+        if (pictureInPictureState.renderFrameKind === kind) return
+        cancelScheduledPictureInPictureFrame()
+      }
+      requestPictureInPictureFrame()
       return
     }
     renderPictureInPictureWindowContent()
@@ -5901,6 +5923,7 @@ Browser:    ${navigator.userAgent}
         }
       }
       document.addEventListener('visibilitychange', function onVisibilityChange () {
+        if (usesVideoElementPictureInPicture && shouldContinueVideoElementPictureInPictureRender()) schedulePictureInPictureRender()
         if (document.visibilityState === 'visible' && !isPictureInPictureAlwaysModeEnabled()) {
           closePictureInPictureWindow()
         }
