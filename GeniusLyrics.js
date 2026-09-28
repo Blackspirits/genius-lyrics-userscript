@@ -3,7 +3,7 @@
 // ==UserLibrary==
 // @name         GeniusLyrics
 // @description  Downloads and shows genius lyrics for Tampermonkey scripts
-// @version      5.16.21.7
+// @version      5.16.21.8
 // @license      GPL-3.0-or-later; http://www.gnu.org/licenses/gpl-3.0.txt
 // @copyright    2019, cuzi (cuzi@openmail.cc) and contributors
 // @supportURL   https://github.com/cvzi/genius-lyrics-userscript/issues
@@ -462,6 +462,20 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     const rgb = backgroundColor.match(/[0-9a-f]{2}/gi).map(hex => parseInt(hex, 16))
     const colorScheme = (rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722) < 128 ? 'dark' : 'light'
     return { backgroundColor, textColor, highlightColor, fontFamily, fontSize, colorScheme }
+  }
+
+  function getPictureInPictureActiveLineIndex (lines) {
+    const active = typeof custom.getPictureInPictureActiveLine === 'function' ? custom.getPictureInPictureActiveLine() : null
+    if (!active || typeof active.text !== 'string' || !Number.isInteger(active.occurrence)) return -1
+    const normalize = text => text.normalize('NFKC').toLowerCase().replace(/[\p{P}\p{S}\s]/gu, '')
+    const target = normalize(active.text)
+    if (!target || active.occurrence < 0 || active.occurrence > 200) return -1
+    let occurrence = 0
+    for (let i = 0; i < lines.length; i++) {
+      if (normalize(lines[i]) !== target) continue
+      if (occurrence++ === active.occurrence) return i
+    }
+    return -1
   }
 
   function getPictureInPictureDesiredScrollTop (scrollingElement, positionFraction) {
@@ -1025,7 +1039,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     const context = pictureInPictureState.context
     if (!canvas || !context) return
 
-    const { backgroundColor, textColor, fontFamily } = getPictureInPictureColors()
+    const { backgroundColor, textColor, highlightColor, fontFamily } = getPictureInPictureColors()
     const fontSize = Math.max(12, pictureInPictureState.firefoxFontSize || Math.round(32 * Math.min(canvas.width / 720, canvas.height / 405)))
     context.fillStyle = backgroundColor
     context.fillRect(0, 0, canvas.width, canvas.height)
@@ -1036,6 +1050,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
 
     const text = pictureInPictureState.statusText || pictureInPictureState.lyricsText || ''
     const lines = text.length > 0 ? text.split('\n') : ['']
+    const activeIndex = pictureInPictureState.statusText ? -1 : getPictureInPictureActiveLineIndex(lines)
     const lineHeight = Math.round(fontSize * 1.375)
     const topPadding = Math.round(fontSize * 3.75)
     const leftPadding = Math.round(fontSize)
@@ -1057,6 +1072,13 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     for (let i = 0; i < lines.length; i++) {
       const y = Math.round(topPadding + i * lineHeight - scrollTop)
       if (y > -lineHeight && y < canvas.height + lineHeight) {
+        if (i === activeIndex) {
+          context.fillStyle = `${highlightColor}33`
+          context.fillRect(0, y - 2, canvas.width, lineHeight)
+          context.fillStyle = highlightColor
+          context.fillRect(0, y - 2, 4, lineHeight)
+          context.fillStyle = textColor
+        }
         context.fillText(lines[i], leftPadding, y)
       }
     }
@@ -1168,12 +1190,44 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
       buttons.style.gap = '6px'
       buttons.style.zIndex = '2'
     }
+    const labels = typeof custom.getPictureInPictureLabels === 'function' ? custom.getPictureInPictureLabels() : null
+    const resume = pipDocument.getElementById('genius-picture-in-picture-resume-button')
+    const fromHere = pipDocument.getElementById('genius-picture-in-picture-resume-from-here-button')
+    if (resume && typeof labels?.resume === 'string' && labels.resume.length <= 40) {
+      resume.textContent = labels.resume
+      resume.title = labels.resume
+    }
+    if (fromHere && typeof labels?.fromHere === 'string' && labels.fromHere.length <= 40) {
+      fromHere.textContent = labels.fromHere
+      fromHere.title = labels.fromHere
+    }
     lyrics.style.margin = '0'
     lyrics.style.paddingTop = '42px'
     lyrics.style.whiteSpace = 'pre-wrap'
     lyrics.style.wordBreak = 'break-word'
     lyrics.style.font = 'inherit'
-    lyrics.textContent = pictureInPictureState.statusText || pictureInPictureState.lyricsText || ''
+    const text = pictureInPictureState.statusText || pictureInPictureState.lyricsText || ''
+    const lines = text.split('\n')
+    const activeIndex = pictureInPictureState.statusText ? -1 : getPictureInPictureActiveLineIndex(lines)
+    if (activeIndex < 0) {
+      lyrics.textContent = text
+    } else {
+      lyrics.replaceChildren()
+      for (let i = 0; i < lines.length; i++) {
+        if (i > 0) lyrics.appendChild(pipDocument.createTextNode('\n'))
+        if (i === activeIndex) {
+          const active = pipDocument.createElement('span')
+          active.style.backgroundColor = `${highlightColor}26`
+          active.style.boxShadow = `inset 3px 0 ${highlightColor}`
+          active.style.paddingLeft = '6px'
+          active.style.borderRadius = '3px'
+          active.textContent = lines[i]
+          lyrics.appendChild(active)
+        } else {
+          lyrics.appendChild(pipDocument.createTextNode(lines[i]))
+        }
+      }
+    }
 
     initPictureInPictureWindow(pipWindow)
   }
