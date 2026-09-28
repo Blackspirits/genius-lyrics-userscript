@@ -3,7 +3,7 @@
 // ==UserLibrary==
 // @name         GeniusLyrics
 // @description  Downloads and shows genius lyrics for Tampermonkey scripts
-// @version      5.16.21.4
+// @version      5.16.21.5
 // @license      GPL-3.0-or-later; http://www.gnu.org/licenses/gpl-3.0.txt
 // @copyright    2019, cuzi (cuzi@openmail.cc) and contributors
 // @supportURL   https://github.com/cvzi/genius-lyrics-userscript/issues
@@ -5331,7 +5331,7 @@ Browser:    ${navigator.userAgent}
     ],
     ' and contributors.',
     ['br'],
-    '2026 modifications and maintenance: ',
+    'Fixes and improvements (2026): ',
     ['a', { style: { 'font-size': '15px' } }, { attr: { target: '_blank', href: 'https://github.com/Blackspirits' } }, 'BlackSpirits'],
     ['br'],
     'Licensed under the GNU General Public License v3.0'
