@@ -48,3 +48,48 @@ test('Picture-in-Picture selects the intended repeated line', () => {
   custom.getPictureInPictureActiveLine = () => null
   assert.equal(runHelper('getPictureInPictureActiveLineIndex', 'getPictureInPictureDesiredScrollTop', custom, { input: lines }), -1)
 })
+
+test('Firefox video Picture-in-Picture switches pending frames when the tab becomes hidden or visible', () => {
+  const start = source.indexOf('  function renderVideoElementPictureInPictureFrame (')
+  const end = source.indexOf('  function renderPictureInPictureWindowContent (', start)
+  assert.ok(start >= 0 && end > start)
+  const animationFrames = new Map()
+  const timers = new Map()
+  let nextId = 1
+  const state = {
+    renderFrameId: 0, renderFrameKind: null, video: {},
+    canvas: { width: 320, height: 180 },
+    context: { fillRect: () => {}, fillText: () => {} },
+    lyricsText: 'First line', statusText: '', firefoxFontSize: 16,
+    renderedPositionFraction: 0, lastRequestedPositionFraction: 0
+  }
+  const context = vm.createContext({
+    document: { hidden: false }, pictureInPictureState: state, usesVideoElementPictureInPicture: true,
+    requestAnimationFrame: callback => { const id = nextId++; animationFrames.set(id, callback); return id },
+    cancelAnimationFrame: id => animationFrames.delete(id),
+    setTimeout: callback => { const id = nextId++; timers.set(id, callback); return id },
+    clearTimeout: id => timers.delete(id),
+    getPictureInPictureColors: () => ({ backgroundColor: '#000', textColor: '#fff', highlightColor: '#0f0', fontFamily: 'sans-serif' }),
+    getPictureInPictureActiveLineIndex: () => -1,
+    isPictureInPictureModeEnabled: () => true
+  })
+  vm.runInContext(source.slice(start, end), context)
+  vm.runInContext('schedulePictureInPictureRender()', context)
+  assert.equal(animationFrames.size, 1)
+  assert.equal(state.renderFrameKind, 'animation')
+
+  context.document.hidden = true
+  vm.runInContext('schedulePictureInPictureRender()', context)
+  assert.equal(animationFrames.size, 0)
+  assert.equal(timers.size, 1)
+  assert.equal(state.renderFrameKind, 'timer')
+  timers.values().next().value()
+  assert.equal(timers.size, 1)
+  assert.equal(state.renderFrameKind, 'timer')
+
+  context.document.hidden = false
+  vm.runInContext('schedulePictureInPictureRender()', context)
+  assert.equal(timers.size, 0)
+  assert.equal(animationFrames.size, 1)
+  assert.equal(state.renderFrameKind, 'animation')
+})
