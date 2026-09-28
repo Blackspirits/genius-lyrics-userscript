@@ -3,7 +3,7 @@
 // ==UserLibrary==
 // @name         GeniusLyrics
 // @description  Downloads and shows genius lyrics for Tampermonkey scripts
-// @version      5.16.21.8
+// @version      5.16.21.9
 // @license      GPL-3.0-or-later; http://www.gnu.org/licenses/gpl-3.0.txt
 // @copyright    2019, cuzi (cuzi@openmail.cc) and contributors
 // @supportURL   https://github.com/cvzi/genius-lyrics-userscript/issues
@@ -1218,9 +1218,9 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
         if (i === activeIndex) {
           const active = pipDocument.createElement('span')
           active.style.backgroundColor = `${highlightColor}26`
-          active.style.boxShadow = `inset 3px 0 ${highlightColor}`
-          active.style.paddingLeft = '6px'
-          active.style.borderRadius = '3px'
+          active.style.textDecoration = 'underline'
+          active.style.textDecorationColor = highlightColor
+          active.style.textDecorationThickness = '2px'
           active.textContent = lines[i]
           lyrics.appendChild(active)
         } else {
