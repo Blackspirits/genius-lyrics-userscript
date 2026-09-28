@@ -3,7 +3,7 @@
 // ==UserLibrary==
 // @name         GeniusLyrics
 // @description  Downloads and shows genius lyrics for Tampermonkey scripts
-// @version      5.16.21.5
+// @version      5.16.21.10
 // @license      GPL-3.0-or-later; http://www.gnu.org/licenses/gpl-3.0.txt
 // @copyright    2019, cuzi (cuzi@openmail.cc) and contributors
 // @supportURL   https://github.com/cvzi/genius-lyrics-userscript/issues
@@ -200,8 +200,8 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     }
 
     try {
-      const { requestAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval } = fc
-      const res = { requestAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval }
+      const { requestAnimationFrame, cancelAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval } = fc
+      const res = { requestAnimationFrame, cancelAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval }
       for (const k in res) res[k] = res[k].bind(win) // necessary
       if (removeIframeFn) Promise.resolve(res.setTimeout).then(removeIframeFn)
       return res
@@ -211,7 +211,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     }
   }
 
-  const { requestAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval } = getUnmodifiedWindowMethods(window)
+  const { requestAnimationFrame, cancelAnimationFrame, setTimeout, setInterval, clearTimeout, clearInterval } = getUnmodifiedWindowMethods(window)
 
   const genius = {
     option: {
@@ -253,6 +253,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
       isScrollLyricsEnabled, // refer to user setting
       isScrollLyricsCallable, // refer to content rendering
       scrollLyrics,
+      refreshPictureInPictureAppearance: schedulePictureInPictureRender,
       config,
       modalAlert,
       modalConfirm,
@@ -357,6 +358,7 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     canvas: null,
     context: null,
     renderFrameId: 0,
+    renderFrameKind: null,
     nativePictureInPictureActive: false,
     renderedPositionFraction: 0,
     firefoxPreviewVisible: true,
@@ -446,9 +448,35 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
 
   function getPictureInPictureColors () {
     const isDarkMode = pictureInPictureDarkModeMedia ? pictureInPictureDarkModeMedia.matches : true
-    return isDarkMode
+    const defaults = isDarkMode
       ? { backgroundColor: '#000000', textColor: '#ffffff', colorScheme: 'dark' }
       : { backgroundColor: '#ffffff', textColor: '#000000', colorScheme: 'light' }
+    const settings = typeof custom.getPictureInPictureAppearance === 'function' ? custom.getPictureInPictureAppearance() : null
+    if (!settings || typeof settings !== 'object') return { ...defaults, highlightColor: '#1ed760', fontFamily: 'system-ui, sans-serif', fontSize: 0 }
+    const color = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : ''
+    const backgroundColor = color(settings.backgroundColor) || defaults.backgroundColor
+    const textColor = color(settings.textColor) || defaults.textColor
+    const highlightColor = color(settings.highlightColor) || '#1ed760'
+    const fonts = ['system-ui, sans-serif', 'Arial, sans-serif', 'Georgia, serif', 'ui-monospace, monospace']
+    const fontFamily = fonts.includes(settings.fontFamily) ? settings.fontFamily : fonts[0]
+    const fontSize = Number.isInteger(settings.fontSize) && settings.fontSize >= 1 && settings.fontSize <= 99 ? settings.fontSize : 0
+    const rgb = backgroundColor.match(/[0-9a-f]{2}/gi).map(hex => parseInt(hex, 16))
+    const colorScheme = (rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722) < 128 ? 'dark' : 'light'
+    return { backgroundColor, textColor, highlightColor, fontFamily, fontSize, colorScheme }
+  }
+
+  function getPictureInPictureActiveLineIndex (lines) {
+    const active = typeof custom.getPictureInPictureActiveLine === 'function' ? custom.getPictureInPictureActiveLine() : null
+    if (!active || typeof active.text !== 'string' || !Number.isInteger(active.occurrence)) return -1
+    const normalize = text => text.normalize('NFKC').toLowerCase().replace(/[\p{P}\p{S}\s]/gu, '')
+    const target = normalize(active.text)
+    if (!target || active.occurrence < 0 || active.occurrence > 200) return -1
+    let occurrence = 0
+    for (let i = 0; i < lines.length; i++) {
+      if (normalize(lines[i]) !== target) continue
+      if (occurrence++ === active.occurrence) return i
+    }
+    return -1
   }
 
   function getPictureInPictureDesiredScrollTop (scrollingElement, positionFraction) {
@@ -1007,22 +1035,24 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
   }
 
   function renderVideoElementPictureInPictureFrame () {
+    cancelScheduledPictureInPictureFrame()
     if (!usesVideoElementPictureInPicture) return
     const canvas = pictureInPictureState.canvas
     const context = pictureInPictureState.context
     if (!canvas || !context) return
 
-    const { backgroundColor, textColor } = getPictureInPictureColors()
+    const { backgroundColor, textColor, highlightColor, fontFamily } = getPictureInPictureColors()
     const fontSize = Math.max(12, pictureInPictureState.firefoxFontSize || Math.round(32 * Math.min(canvas.width / 720, canvas.height / 405)))
     context.fillStyle = backgroundColor
     context.fillRect(0, 0, canvas.width, canvas.height)
 
     context.fillStyle = textColor
-    context.font = `${fontSize}px system-ui, sans-serif`
+    context.font = `${fontSize}px ${fontFamily}`
     context.textBaseline = 'top'
 
     const text = pictureInPictureState.statusText || pictureInPictureState.lyricsText || ''
     const lines = text.length > 0 ? text.split('\n') : ['']
+    const activeIndex = pictureInPictureState.statusText ? -1 : getPictureInPictureActiveLineIndex(lines)
     const lineHeight = Math.round(fontSize * 1.375)
     const topPadding = Math.round(fontSize * 3.75)
     const leftPadding = Math.round(fontSize)
@@ -1044,21 +1074,48 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     for (let i = 0; i < lines.length; i++) {
       const y = Math.round(topPadding + i * lineHeight - scrollTop)
       if (y > -lineHeight && y < canvas.height + lineHeight) {
+        if (i === activeIndex) {
+          context.fillStyle = `${highlightColor}33`
+          context.fillRect(0, y - 2, canvas.width, lineHeight)
+          context.fillStyle = highlightColor
+          context.fillRect(0, y - 2, 4, lineHeight)
+          context.fillStyle = textColor
+        }
         context.fillText(lines[i], leftPadding, y)
       }
     }
 
     if (shouldContinueVideoElementPictureInPictureRender()) {
-      pictureInPictureState.renderFrameId = requestAnimationFrame(renderVideoElementPictureInPictureFrame)
+      requestPictureInPictureFrame()
+    }
+  }
+
+  function cancelScheduledPictureInPictureFrame () {
+    const { renderFrameId, renderFrameKind } = pictureInPictureState
+    if (renderFrameKind === 'timer') clearTimeout(renderFrameId)
+    if (renderFrameKind === 'animation') cancelAnimationFrame(renderFrameId)
+    pictureInPictureState.renderFrameId = 0
+    pictureInPictureState.renderFrameKind = null
+  }
+
+  function requestPictureInPictureFrame () {
+    if (document.hidden) {
+      pictureInPictureState.renderFrameKind = 'timer'
+      pictureInPictureState.renderFrameId = setTimeout(renderVideoElementPictureInPictureFrame, 125)
     } else {
-      pictureInPictureState.renderFrameId = 0
+      pictureInPictureState.renderFrameKind = 'animation'
+      pictureInPictureState.renderFrameId = requestAnimationFrame(renderVideoElementPictureInPictureFrame)
     }
   }
 
   function schedulePictureInPictureRender () {
     if (usesVideoElementPictureInPicture) {
-      if (pictureInPictureState.renderFrameId !== 0) return
-      pictureInPictureState.renderFrameId = requestAnimationFrame(renderVideoElementPictureInPictureFrame)
+      const kind = document.hidden ? 'timer' : 'animation'
+      if (pictureInPictureState.renderFrameId !== 0) {
+        if (pictureInPictureState.renderFrameKind === kind) return
+        cancelScheduledPictureInPictureFrame()
+      }
+      requestPictureInPictureFrame()
       return
     }
     renderPictureInPictureWindowContent()
@@ -1092,12 +1149,12 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
       pipDocument.getElementById('genius-picture-in-picture-resume-from-here-button').addEventListener('click', onResumePictureInPictureAutoScrollFromHereClick)
     }
 
-    const { backgroundColor, textColor, colorScheme } = getPictureInPictureColors()
+    const { backgroundColor, textColor, highlightColor, fontFamily, fontSize, colorScheme } = getPictureInPictureColors()
     pipDocument.documentElement.style.colorScheme = colorScheme
     pipDocument.body.style.margin = '0'
     pipDocument.body.style.backgroundColor = backgroundColor
     pipDocument.body.style.color = textColor
-    pipDocument.body.style.font = '16px system-ui, sans-serif'
+    pipDocument.body.style.font = `${fontSize || 16}px ${fontFamily}`
 
     const root = pipDocument.getElementById('genius-picture-in-picture-root')
     const lyrics = pipDocument.getElementById('genius-picture-in-picture-lyrics')
@@ -1109,6 +1166,41 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
     root.style.padding = '16px'
     root.style.backgroundColor = backgroundColor
     root.style.color = textColor
+    root.style.setProperty('--egl-pip-accent', highlightColor)
+    root.style.setProperty('--egl-pip-border', colorScheme === 'dark' ? '#ffffff55' : '#00000033')
+    root.style.setProperty('--egl-pip-control-bg', colorScheme === 'dark' ? '#242424' : '#f1f1f1')
+    root.style.setProperty('--egl-pip-text', textColor)
+
+    if (!pipDocument.getElementById('genius-picture-in-picture-style')) {
+      const style = pipDocument.createElement('style')
+      style.id = 'genius-picture-in-picture-style'
+      style.textContent = `
+        #genius-picture-in-picture-scroll-buttons button {
+          cursor: pointer;
+          min-height: 34px;
+          padding: 7px 12px;
+          border: 1px solid var(--egl-pip-border);
+          border-radius: 9px;
+          background: var(--egl-pip-control-bg);
+          color: var(--egl-pip-text);
+          box-shadow: 0 3px 12px #0003;
+          font: 600 12px system-ui, sans-serif;
+          transition: border-color .15s, transform .15s;
+        }
+        #genius-picture-in-picture-scroll-buttons button:hover {
+          border-color: var(--egl-pip-accent);
+          transform: translateY(-1px);
+        }
+        #genius-picture-in-picture-scroll-buttons button:focus-visible {
+          outline: 2px solid var(--egl-pip-accent);
+          outline-offset: 2px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          #genius-picture-in-picture-scroll-buttons button { transition: none; }
+        }
+      `
+      pipDocument.head.appendChild(style)
+    }
 
     const buttons = pipDocument.getElementById('genius-picture-in-picture-scroll-buttons')
     if (buttons) {
@@ -1120,22 +1212,44 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
       buttons.style.gap = '6px'
       buttons.style.zIndex = '2'
     }
-    for (const button of pipDocument.querySelectorAll('#genius-picture-in-picture-scroll-buttons button')) {
-      button.style.border = `1px solid ${textColor}`
-      button.style.backgroundColor = backgroundColor
-      button.style.color = textColor
-      button.style.borderRadius = '999px'
-      button.style.padding = '6px 10px'
-      button.style.font = '12px system-ui, sans-serif'
-      button.style.cursor = 'pointer'
+    const labels = typeof custom.getPictureInPictureLabels === 'function' ? custom.getPictureInPictureLabels() : null
+    const resume = pipDocument.getElementById('genius-picture-in-picture-resume-button')
+    const fromHere = pipDocument.getElementById('genius-picture-in-picture-resume-from-here-button')
+    if (resume && typeof labels?.resume === 'string' && labels.resume.length <= 40) {
+      resume.textContent = labels.resume
+      resume.title = labels.resume
     }
-
+    if (fromHere && typeof labels?.fromHere === 'string' && labels.fromHere.length <= 40) {
+      fromHere.textContent = labels.fromHere
+      fromHere.title = labels.fromHere
+    }
     lyrics.style.margin = '0'
     lyrics.style.paddingTop = '42px'
     lyrics.style.whiteSpace = 'pre-wrap'
     lyrics.style.wordBreak = 'break-word'
     lyrics.style.font = 'inherit'
-    lyrics.textContent = pictureInPictureState.statusText || pictureInPictureState.lyricsText || ''
+    const text = pictureInPictureState.statusText || pictureInPictureState.lyricsText || ''
+    const lines = text.split('\n')
+    const activeIndex = pictureInPictureState.statusText ? -1 : getPictureInPictureActiveLineIndex(lines)
+    if (activeIndex < 0) {
+      lyrics.textContent = text
+    } else {
+      lyrics.replaceChildren()
+      for (let i = 0; i < lines.length; i++) {
+        if (i > 0) lyrics.appendChild(pipDocument.createTextNode('\n'))
+        if (i === activeIndex) {
+          const active = pipDocument.createElement('span')
+          active.style.backgroundColor = `${highlightColor}26`
+          active.style.textDecoration = 'underline'
+          active.style.textDecorationColor = highlightColor
+          active.style.textDecorationThickness = '2px'
+          active.textContent = lines[i]
+          lyrics.appendChild(active)
+        } else {
+          lyrics.appendChild(pipDocument.createTextNode(lines[i]))
+        }
+      }
+    }
 
     initPictureInPictureWindow(pipWindow)
   }
@@ -2171,8 +2285,10 @@ function geniusLyrics (custom) { // eslint-disable-line no-unused-vars
 
       // User scrolled -> stop auto scroll
       if (!btnContainer) {
-        const resumeButton = document.createElement('div')
-        const resumeButtonFromHere = document.createElement('div')
+        const resumeButton = document.createElement('button')
+        const resumeButtonFromHere = document.createElement('button')
+        resumeButton.type = 'button'
+        resumeButtonFromHere.type = 'button'
         const resumeAutoScrollButtonContainer = document.createElement('div')
         resumeAutoScrollButtonContainer.id = 'resumeAutoScrollButtonContainer'
         resumeButton.addEventListener('click', onResumeAutoScrollClick, false)
@@ -2775,16 +2891,29 @@ Browser:    ${navigator.userAgent}
   #resumeAutoScrollButtonContainer #resumeAutoScrollButton,
   #resumeAutoScrollButtonContainer #resumeAutoScrollFromHereButton{
     cursor: pointer;
-    border: 1px solid #d9d9d9;
-    border-radius:100%;
-    background:white;
+    position: relative;
+    box-sizing: border-box;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid #ffffff55;
+    border-radius: 10px;
+    background: #242424ee;
+    box-shadow: 0 3px 12px #0005;
+    --egl-btn-color: #f5f5f5;
     display: flex;
     justify-content: center;
     align-content: center;
     justify-items: center;
     align-items: center;
-    padding: calc(1.732*var(--egl-btn-half-border-size) + 3px);
-    contain: strict;
+  }
+  #resumeAutoScrollButtonContainer button:hover {
+    border-color: #1ed760;
+    background: #303030;
+  }
+  #resumeAutoScrollButtonContainer button:focus-visible {
+    outline: 2px solid #1ed760;
+    outline-offset: 2px;
   }
   #resumeAutoScrollButtonContainer {
     visibility: hidden;
@@ -3473,7 +3602,7 @@ Browser:    ${navigator.userAgent}
             .annotationbox {position:absolute; display:none; max-width:95%; min-width: 160px;padding: 3px 7px;margin: 2px 0 0;background-color: #282828;background-clip: padding-box;border: 1px solid rgba(0,0,0,.15);border-radius: .25rem;}
             .annotationbox .annotationlabel {display:inline-block;background-color: hsla(0,0%,100%,.6);color: #000;border-radius: 2px;padding: 0 .3em;}
             .annotationbox .annotation_rich_text_formatting {color: black}
-            .annotationbox .annotation_rich_text_formatting a {color: black)}
+            .annotationbox .annotation_rich_text_formatting a {color: black}
 
             div[class*="HeaderArtistAndTracklistPrimis"] {
               display:none;
@@ -5125,7 +5254,8 @@ Browser:    ${navigator.userAgent}
     inputFontSize.id = 'inputFontSize748'
     inputFontSize.style.maxWidth = '5em'
     const onFontSizeChanged = function onFontSizeChangeListener (evt) {
-      genius.option.fontSize = Math.max(0, parseInt(inputFontSize.value) || 0)
+      genius.option.fontSize = Math.min(99, Math.max(0, parseInt(inputFontSize.value) || 0))
+      inputFontSize.value = genius.option.fontSize
       custom.GM.setValue('fontsize', genius.option.fontSize).then(() => {
         if (genius.onThemeChanged) {
           for (const f of genius.onThemeChanged) {
@@ -5756,7 +5886,7 @@ Browser:    ${navigator.userAgent}
     genius.option.firefoxPictureInPictureHeight = values.firefoxPictureInPictureHeight
     genius.option.firefoxPictureInPictureFontSize = values.firefoxPictureInPictureFontSize
     genius.option.romajiPriority = values.romajipriority
-    genius.option.fontSize = Math.max(0, parseInt(values.fontsize) || 0)
+    genius.option.fontSize = Math.min(99, Math.max(0, parseInt(values.fontsize) || 0))
     genius.option.useLZCompression = values.useLZCompression
     syncFirefoxPictureInPictureStateFromOptions()
     updateFirefoxAspectRatioBox()
@@ -5793,6 +5923,7 @@ Browser:    ${navigator.userAgent}
         }
       }
       document.addEventListener('visibilitychange', function onVisibilityChange () {
+        if (usesVideoElementPictureInPicture && shouldContinueVideoElementPictureInPictureRender()) schedulePictureInPictureRender()
         if (document.visibilityState === 'visible' && !isPictureInPictureAlwaysModeEnabled()) {
           closePictureInPictureWindow()
         }
